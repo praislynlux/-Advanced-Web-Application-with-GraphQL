@@ -1,0 +1,83 @@
+// Install dependencies with: npm install express apollo-server-express graphql react react-dom @apollo/client
+
+const express = require('express');
+const { ApolloServer, gql } = require('apollo-server-express');
+const path = require('path');
+const fs = require('fs');
+const React = require('react');
+const ReactDOMServer = require('react-dom/server');
+const { ApolloProvider, InMemoryCache, gql: clientGql, useQuery } = require('@apollo/client');
+
+// Define GraphQL schema
+const typeDefs = gql`
+  type Query {
+    hello: String
+  }
+`;
+
+// Define resolvers
+const resolvers = {
+  Query: {
+    hello: () => 'Hello world!',
+  },
+};
+
+// Initialize Apollo Server
+const server = new ApolloServer({ typeDefs, resolvers });
+
+const app = express();
+server.applyMiddleware({ app });
+
+// Serve static files from the React app
+app.use(express.static(path.join(__dirname, 'build')));
+
+// React component
+function Hello() {
+  const { loading, error, data } = useQuery(clientGql`
+    query GetHello {
+      hello
+    }
+  `);
+
+  if (loading) return React.createElement('p', null, 'Loading...');
+  if (error) return React.createElement('p', null, `Error: ${error.message}`);
+
+  return React.createElement('p', null, data.hello);
+}
+
+// Main App component
+function App() {
+  return React.createElement(ApolloProvider, { client: new InMemoryCache() }, 
+    React.createElement('div', null, 
+      React.createElement('h1', null, 'My GraphQL App'),
+      React.createElement(Hello)
+    )
+  );
+}
+
+// Serve the React app on the root path
+app.get('/', (req, res) => {
+  const html = ReactDOMServer.renderToString(
+    React.createElement(ApolloProvider, { client: new InMemoryCache() },
+      React.createElement(App)
+    )
+  );
+  
+  res.send(`
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <title>My GraphQL App</title>
+      </head>
+      <body>
+        <div id="root">${html}</div>
+        <script src="/static/js/bundle.js"></script>
+      </body>
+    </html>
+  `);
+});
+
+// Start the server
+app.listen({ port: 4000 }, () =>
+  console.log(`Server ready at http://localhost:4000${server.graphqlPath}`)
+);
